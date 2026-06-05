@@ -66,17 +66,21 @@ export interface AcumbamailClientOptions {
   timeoutMs?: number;
   /** Reintentos ante 429 / errores de red transitorios. */
   maxRetries?: number;
+  /** Si true, registra método + status HTTP por stderr (nunca el token ni el cuerpo). */
+  debug?: boolean;
 }
 
 export class AcumbamailClient {
   private authToken: string;
   private timeoutMs: number;
   private maxRetries: number;
+  private debug: boolean;
 
   constructor(opts: AcumbamailClientOptions) {
     // El token puede faltar al construir; se valida en la primera llamada real
     // (call), para que las tools con gate puedan responder sin tocar la API.
     this.authToken = opts.authToken ?? "";
+    this.debug = opts.debug ?? false;
     // `?? 30000` no captura NaN (Number('abc')) ni 0 (Number('')): guarda explícita.
     this.timeoutMs =
       Number.isFinite(opts.timeoutMs) && (opts.timeoutMs as number) > 0
@@ -127,6 +131,12 @@ export class AcumbamailClient {
         clearTimeout(timer);
 
         const text = await res.text();
+
+        if (this.debug) {
+          process.stderr.write(
+            `[acumbamail] ${method} → HTTP ${res.status}${attempt > 0 ? ` (reintento ${attempt})` : ""}\n`,
+          );
+        }
 
         // Rate limit → backoff exponencial. Seguro de reintentar siempre: un 429
         // significa que la petición fue rechazada sin llegar a procesarse.

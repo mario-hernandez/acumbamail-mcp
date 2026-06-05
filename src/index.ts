@@ -28,7 +28,11 @@ function getClient(): AcumbamailClient {
   const timeoutMs = process.env.ACUMBAMAIL_TIMEOUT_MS
     ? Number(process.env.ACUMBAMAIL_TIMEOUT_MS)
     : undefined;
-  _client = new AcumbamailClient({ authToken: token, timeoutMs });
+  _client = new AcumbamailClient({
+    authToken: token,
+    timeoutMs,
+    debug: process.env.ACUMBAMAIL_DEBUG === "1",
+  });
   return _client;
 }
 
@@ -41,6 +45,26 @@ function toText(result: unknown): string {
   }
 }
 
+/** Hints MCP derivados del tipo de operación de la tool (no sustituyen al gate confirm:true). */
+function buildAnnotations(name: string) {
+  const readOnly = name.includes("_get_");
+  const destructive =
+    name.includes("_delete_") || name === "acumbamail_create_campaign";
+  return {
+    readOnlyHint: readOnly,
+    destructiveHint: destructive ? true : undefined,
+    idempotentHint: readOnly ? true : undefined,
+    openWorldHint: true,
+  };
+}
+
+/** Rutas de rechazo (gate sin confirm, o campaña sin enlace de baja): deben marcarse isError. */
+function isBlockedResult(result: unknown): boolean {
+  if (!result || typeof result !== "object") return false;
+  const r = result as Record<string, unknown>;
+  return r.needsConfirmation === true || Boolean(r.error);
+}
+
 async function main(): Promise<void> {
   const server = new McpServer({ name: "acumbamail", version: VERSION });
 
@@ -51,11 +75,17 @@ async function main(): Promise<void> {
         title: tool.title,
         description: tool.description,
         inputSchema: tool.inputSchema,
+        annotations: buildAnnotations(tool.name),
       },
       async (args: Record<string, any>) => {
         try {
           const result = await tool.handler(getClient(), args ?? {});
-          return { content: [{ type: "text", text: toText(result) }] };
+          // Las rutas de rechazo (gate sin confirm:true, o campaña sin enlace de
+          // baja) se marcan isError para que el LLM nunca las lea como hecho.
+          return {
+            content: [{ type: "text", text: toText(result) }],
+            ...(isBlockedResult(result) ? { isError: true } : {}),
+          };
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return { content: [{ type: "text", text: `Error: ${msg}` }], isError: true };

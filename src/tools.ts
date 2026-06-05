@@ -129,7 +129,7 @@ export const TOOLS: ToolDef[] = [
     name: "acumbamail_get_subscribers",
     title: "Listar suscriptores",
     description:
-      "Lista los suscriptores de una lista. status: 0 activos, 1 sin verificar, 2 baja, 3 hard bounced, 4 quejas. Listas grandes requieren paginar con block_index.",
+      "Lista los suscriptores de una lista. status: 0 activos, 1 sin verificar, 2 baja, 3 hard bounced, 4 quejas. Listas grandes: pagina iterando block_index (0, 1, 2…) hasta recibir una lista vacía.",
     inputSchema: {
       list_id: z.number().int().describe("ID de la lista"),
       status: z.number().int().min(0).max(4).optional().describe("Filtro de estado 0-4"),
@@ -352,6 +352,14 @@ export const TOOLS: ToolDef[] = [
       "Lista de hard bounces de una campaña. Clave para limpiar listas antes de reenviar.",
     inputSchema: { campaign_id: z.number().int().describe("ID de la campaña") },
     handler: (c, a) => c.call("getCampaignHardBounces", { campaign_id: a.campaign_id }),
+  },
+  {
+    name: "acumbamail_get_campaign_information_by_isp",
+    title: "Entregabilidad por proveedor (ISP)",
+    description:
+      "Métricas de la campaña desglosadas por proveedor de correo (Gmail, Outlook, Yahoo…): enviados, aperturas, bounces, quejas. Útil para diagnosticar problemas de entregabilidad por dominio antes de reenviar a listas grandes.",
+    inputSchema: { campaign_id: z.number().int().describe("ID de la campaña") },
+    handler: (c, a) => c.call("getCampaignInformationByISP", { campaign_id: a.campaign_id }),
   },
 
   // ─────────────────────── TRANSACCIONAL ───────────────────────

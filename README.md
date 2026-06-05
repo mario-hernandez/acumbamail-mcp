@@ -43,7 +43,7 @@
 
 ## Características
 
-- **24 tools** sobre la API de Acumbamail: listas, suscriptores, campañas, estadísticas y email transaccional.
+- **25 tools** sobre la API de Acumbamail: listas, suscriptores, campañas, estadísticas y email transaccional.
 - **Gates de confirmación** en toda acción peligrosa (`create_campaign`, `delete_list`, `delete_campaign`, `delete_subscriber`, `batch_delete_subscribers`): requieren `confirm: true` explícito. Sin él, la tool **describe el efecto y no actúa**.
 - **Anti-envío accidental**: en Acumbamail `createCampaign` **envía la campaña de inmediato** (no hay borrador vía API). Por eso `acumbamail_create_campaign` exige confirmación y **rechaza** cualquier HTML sin el enlace de baja obligatorio `*|UNSUBSCRIBE_URL|*`.
 - **Robusto**: reintentos con backoff exponencial ante rate-limit (429), timeout configurable, errores tipados.
@@ -61,6 +61,10 @@
 ## Instalación
 
 Requisitos: **Node.js ≥ 18**.
+
+La forma más sencilla es no instalar nada: tu cliente MCP puede ejecutarlo con `npx` (ver [Registro](#registro-en-tu-cliente-mcp)).
+
+Para desarrollo o ejecución local, clónalo y compílalo:
 
 ```bash
 git clone https://github.com/mario-hernandez/acumbamail-mcp.git
@@ -86,6 +90,7 @@ cp .env.example .env
 |---|---|---|---|
 | `ACUMBAMAIL_AUTH_TOKEN` | ✅ | — | Tu token de la API de Acumbamail |
 | `ACUMBAMAIL_TIMEOUT_MS` | ❌ | `30000` | Timeout de cada petición HTTP, en ms |
+| `ACUMBAMAIL_DEBUG` | ❌ | — | Si `=1`, registra método + status HTTP por `stderr` (nunca el token ni los datos) |
 
 ## Registro en tu cliente MCP
 
@@ -94,7 +99,7 @@ cp .env.example .env
 ```bash
 claude mcp add acumbamail \
   -e ACUMBAMAIL_AUTH_TOKEN="tu_token" \
-  -- node /ruta/absoluta/a/acumbamail-mcp/dist/index.js
+  -- npx -y acumbamail-mcp
 ```
 
 > 💡 **macOS — sin escribir el token en ningún sitio.** Guárdalo una vez en el Llavero y léelo en el momento del registro:
@@ -104,7 +109,7 @@ claude mcp add acumbamail \
 > # registrar leyéndolo del llavero
 > claude mcp add acumbamail \
 >   -e ACUMBAMAIL_AUTH_TOKEN="$(security find-generic-password -s acumbamail-api -w)" \
->   -- node /ruta/absoluta/a/acumbamail-mcp/dist/index.js
+>   -- npx -y acumbamail-mcp
 > ```
 
 Comprueba con `claude mcp list` que aparece `acumbamail … ✓ Connected`.
@@ -117,13 +122,15 @@ En el archivo de configuración MCP de tu cliente:
 {
   "mcpServers": {
     "acumbamail": {
-      "command": "node",
-      "args": ["/ruta/absoluta/a/acumbamail-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "acumbamail-mcp"],
       "env": { "ACUMBAMAIL_AUTH_TOKEN": "tu_token" }
     }
   }
 }
 ```
+
+> Para usar el código local en vez del paquete npm, sustituye `npx -y acumbamail-mcp` por `node /ruta/absoluta/a/acumbamail-mcp/dist/index.js` (o el `command`/`args` equivalentes en el JSON).
 
 ## Tools disponibles
 
@@ -167,6 +174,7 @@ En el archivo de configuración MCP de tu cliente:
 | `acumbamail_get_campaign_clicks` | Clics de la campaña |
 | `acumbamail_get_campaign_soft_bounces` | Soft bounces |
 | `acumbamail_get_campaign_hard_bounces` | Hard bounces (clave para limpiar listas) |
+| `acumbamail_get_campaign_information_by_isp` | Entregabilidad por proveedor (Gmail, Outlook, Yahoo…) |
 
 ### Transaccional
 | Tool | Descripción |
@@ -205,6 +213,7 @@ Para enviar una campaña, el agente te pedirá confirmación explícita (gate de
 ```bash
 npm run dev     # compilación en watch
 npm run build   # compilación única a dist/
+npm test        # tests locales (fetch mockeado, sin red ni CI)
 npm start       # ejecuta el servidor (necesita ACUMBAMAIL_AUTH_TOKEN)
 ```
 
@@ -219,7 +228,7 @@ src/
 
 ## Roadmap
 
-Métodos de la API por verificar contra el panel logueado antes de exponerlos como tools: `updateList`, `unsubscribeSubscriber`, webhooks (`createWebhook`/`getWebhooks`), SMS (`sendSMS`, campañas SMS), info SMTP (`getSMTPInfo`/log) y senders/credit de cuenta.
+Posibles ampliaciones, **solo tras verificar que el método existe** contra la API real (no exponer endpoints fantasma): `updateList`, `unsubscribeSubscriber` (baja sin borrar), webhooks y SMS. Nota: `getSenders` y `getCredit` se comprobaron y **no existen** en la API; `getCampaignInformationByISP` ya está expuesto.
 
 ## Aviso legal y de marca
 
