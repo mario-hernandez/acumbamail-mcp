@@ -228,7 +228,7 @@ export const TOOLS: ToolDef[] = [
     description: "Borra varios suscriptores de una lista por su email. Requiere confirm:true.",
     inputSchema: {
       list_id: z.number().int().describe("ID de la lista"),
-      emails: z.array(z.string().email()).describe("Emails a borrar"),
+      emails: z.array(z.string().email()).min(1).describe("Emails a borrar"),
       ...GATE,
     },
     handler: (c, a) => {
@@ -275,7 +275,7 @@ export const TOOLS: ToolDef[] = [
         from_email: a.from_email,
         subject: a.subject,
         content: a.content,
-        lists: JSON.stringify(a.lists),
+        lists: a.lists, // array → el cliente lo aplana a lists[0]=, lists[1]= (formato SDK)
         pre_header: a.pre_header,
         tracking_urls: a.tracking_urls === false ? 0 : 1,
       });

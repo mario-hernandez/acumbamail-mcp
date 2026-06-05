@@ -25,12 +25,20 @@
   ],
   "author": "Mario Hernández <developer@supera.dev>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mario-hernandez/acumbamail-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mario-hernandez/acumbamail-mcp/issues"
+  },
+  "homepage": "https://github.com/mario-hernandez/acumbamail-mcp#readme",
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
-    "zod": "^3.23.8"
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

@@ -39,11 +39,12 @@ export type Params = Record<string, ParamValue>;
 
 /**
  * Aplana un objeto de parámetros a pares clave/valor en el formato que espera
- * Acumbamail en form-urlencoded:
- *   - dict:   merge_fields[email]=...   (clave[subclave]=valor)
- *   - array:  email_list[0]=...         (clave[indice]=valor)
- * Excepción: algunos parámetros (p.ej. `lists`, `subscribers_data`) deben ir
- * como STRING JSON; en esos casos el handler ya pasa el string serializado.
+ * Acumbamail en form-urlencoded (igual que el SDK PHP oficial):
+ *   - array:  lists[0]=..., email_list[0]=...   (clave[indice]=valor)
+ *   - dict:   merge_fields[email]=...           (clave[subclave]=valor)
+ * Único parámetro que va como STRING JSON: `subscribers_data` (batchAddSubscribers);
+ * el handler ya pasa el `JSON.stringify`. Los demás arrays (p.ej. `lists`) se pasan
+ * como array y se aplanan aquí a notación indexada.
  */
 function appendParam(usp: URLSearchParams, key: string, value: ParamValue): void {
   if (value === null || value === undefined) return;
@@ -76,7 +77,11 @@ export class AcumbamailClient {
     // El token puede faltar al construir; se valida en la primera llamada real
     // (call), para que las tools con gate puedan responder sin tocar la API.
     this.authToken = opts.authToken ?? "";
-    this.timeoutMs = opts.timeoutMs ?? 30000;
+    // `?? 30000` no captura NaN (Number('abc')) ni 0 (Number('')): guarda explícita.
+    this.timeoutMs =
+      Number.isFinite(opts.timeoutMs) && (opts.timeoutMs as number) > 0
+        ? (opts.timeoutMs as number)
+        : 30000;
     this.maxRetries = opts.maxRetries ?? 3;
   }
 
@@ -101,6 +106,13 @@ export class AcumbamailClient {
       return usp;
     };
 
+    // Solo los métodos de lectura (get*) son idempotentes: ante un fallo de red
+    // o timeout es seguro reintentarlos. Los mutadores (create/add/batch/delete/
+    // send) NO se reintentan ante error de red, porque el POST podría haber
+    // llegado y ejecutado (p.ej. una campaña que se envía al instante) y un
+    // reintento causaría un DOBLE ENVÍO.
+    const idempotent = method.startsWith("get");
+
     let lastErr: unknown;
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
       const controller = new AbortController();
@@ -116,7 +128,8 @@ export class AcumbamailClient {
 
         const text = await res.text();
 
-        // Rate limit → backoff exponencial y reintento.
+        // Rate limit → backoff exponencial. Seguro de reintentar siempre: un 429
+        // significa que la petición fue rechazada sin llegar a procesarse.
         if (res.status === 429 && attempt < this.maxRetries) {
           await sleep(500 * Math.pow(2, attempt));
           continue;
@@ -131,24 +144,41 @@ export class AcumbamailClient {
         }
         if (!res.ok) {
           throw new AcumbamailError(
-            `Acumbamail devolvió HTTP ${res.status} en ${method}.`,
+            `Acumbamail devolvió HTTP ${res.status} en ${method}: ${text.slice(0, 300)}`,
             res.status,
             text,
           );
         }
 
+        let parsed: unknown;
         try {
-          return JSON.parse(text);
+          parsed = JSON.parse(text);
         } catch {
           return text;
         }
+        // Acumbamail puede devolver HTTP 200 con un cuerpo de error (p.ej.
+        // {"error": {...}}). Tratarlo como fallo, no reportarlo como éxito.
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          !Array.isArray(parsed) &&
+          "error" in parsed &&
+          (parsed as Record<string, unknown>).error
+        ) {
+          throw new AcumbamailError(
+            `Acumbamail devolvió un error en ${method}: ${JSON.stringify((parsed as Record<string, unknown>).error)}`,
+            res.status,
+            text,
+          );
+        }
+        return parsed;
       } catch (err) {
         clearTimeout(timer);
         lastErr = err;
-        // Reintenta solo errores de red/abort, no errores de API ya tipados.
-        const retriable =
-          !(err instanceof AcumbamailError) && attempt < this.maxRetries;
-        if (retriable) {
+        // No reintentar errores de API ya tipados. Errores de red/abort: reintentar
+        // SOLO si el método es idempotente (lectura), nunca en escrituras.
+        const networkError = !(err instanceof AcumbamailError);
+        if (networkError && idempotent && attempt < this.maxRetries) {
           await sleep(500 * Math.pow(2, attempt));
           continue;
         }
