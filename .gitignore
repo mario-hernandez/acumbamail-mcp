@@ -20,3 +20,6 @@ npm-debug.log*
 .idea/
 .vscode/
 *.swp
+
+# Metadatos de sesión locales (no forman parte del proyecto OSS)
+ULTIMACONVERSACION.md
